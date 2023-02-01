@@ -1,47 +1,161 @@
-// // classes
-// class Invoice {
-//   client: string;
-//   details: string;
-//   amount: number;
+interface Employee {
+    uniqueId: number;
+    name: string;
+    subordinates: Employee[];
+}
 
-//   constructor(c: string, d: string, a: number){
-//     this.client = c;
-//     this.details = d;
-//     this.amount = a;
-//   }
+interface IEmployeeOrgApp {
+    ceo: Employee;
+    move(employeeID: number, supervisorID: number): void;
+    undo(): void;
+    redo(): void;
+}
 
-//   format() {
-//     return `${this.client} owes £${this.amount} for ${this.details}`;
-//   }
-// }
+class EmployeeOrgAppV2 implements IEmployeeOrgApp {
+    
+    ceo: Employee;
+    private undoStack: Array<{ employee: Employee, oldSupervisor: Employee, newSupervisor: Employee }> = [];
+    private redoStack: Array<{ employee: Employee, oldSupervisor: Employee, newSupervisor: Employee }> = [];
 
-// const invOne = new Invoice('mario', 'work on the mario website', 250);
-// const invTwo = new Invoice('luigi', 'work on the luigi website', 300);
+    constructor(ceo: Employee) {
+        this.ceo = ceo;
+    }
 
-// let invoices: Invoice[] = [];
-// invoices.push(invOne)
-// invoices.push(invTwo);
-// // invoices.push({ name: 'shaun' });
+    move(employeeID: number, supervisorID: number): void {
+        const employee = this.findEmployee(employeeID, this.ceo);
+        const supervisor = this.findEmployee(supervisorID, this.ceo);
+        if (!employee || !supervisor) {
+            console.log("Employee or Supervisor not found");
+            return;
+        }
+        const oldSupervisor = this.findSupervisor(employee, this.ceo);
+        this.removeFromSubordinates(employee, oldSupervisor);
+        this.addToSubordinates(employee, supervisor);
+        this.undoStack.push({ employee, oldSupervisor, newSupervisor: supervisor });
+    }
+    undo(): void {
+        const lastMove = this.undoStack.pop();
+        if (!lastMove) {
+            console.log("No more moves to undo");
+            return;
+        }
+        this.removeFromSubordinates(lastMove.employee, lastMove.newSupervisor);
+        this.addToSubordinates(lastMove.employee, lastMove.oldSupervisor);
+        this.redoStack.push(lastMove);
+    }
+    redo(): void {
+        const lastUndo = this.redoStack.pop();
+        if (!lastUndo) {
+            console.log("No more moves to redo");
+            return;
+        }
+        this.removeFromSubordinates(lastUndo.employee, lastUndo.oldSupervisor);
+        this.addToSubordinates(lastUndo.employee, lastUndo.newSupervisor);
+        this.undoStack.push(lastUndo);
+    }
 
-// console.log(invoices);
+    private findEmployee(employeeID: number, employee: Employee): Employee | null {
+        if (employee.uniqueId === employeeID) {
+            return employee;
+        }
+        for (const subordinate of employee.subordinates) {
+            const found = this.findEmployee(employeeID, subordinate);
+            if (found) {
+                return found;
+            }
+        }
+        return null;
+    }
+    private findSupervisor(employee: Employee, supervisor: Employee): Employee {
+        if (supervisor.subordinates.includes(employee)) {
+            return supervisor;
+        }
+        for (const subordinate of supervisor.subordinates) {
+            const found = this.findSupervisor(employee, subordinate);
+            if (found) {
+                return found;
+            }
+        }
+        return supervisor;
+    }
+    private removeFromSubordinates(employee: Employee, supervisor: Employee) {
+        const index = supervisor.subordinates.indexOf(employee);
+        if (index !== -1) {
+            supervisor.subordinates.splice(index, 1);
+        }
+    }
+    private addToSubordinates(employee: Employee, supervisor: Employee) {
+        supervisor.subordinates.push(employee);
+    }
+}
+
+const root = new Map() as Map<number, Employee[]>
+
+const insert = (supervisor: Employee, employee: Employee) => {
+    supervisor.subordinates.push(employee);
+    if (root.has(supervisor.uniqueId)) {
+        const rootValue = root.get(supervisor.uniqueId);
+        rootValue?.push(employee);
+        root.set(supervisor.uniqueId, rootValue || []);
+    }
+    else {
+        root.set(supervisor.uniqueId, [employee]);
+    }
+    root.set(employee.uniqueId, []);
+    return employee;
+}
 
 
-// const form = document.querySelector('.new-item-form') as HTMLFormElement;
-// console.log(form.children);
+const CEO: Employee = {
+    name: 'Mark',
+    uniqueId: 1,
+    subordinates: [
 
-// // inputs
-// const type = document.querySelector('#type') as HTMLInputElement;
-// const tofrom = document.querySelector('#tofrom') as HTMLInputElement;
-// const details = document.querySelector('#details') as HTMLInputElement;
-// const amount = document.querySelector('#amount') as HTMLInputElement;
+    ]
+}
 
-// form.addEventListener('submit', (e: Event) => {
-//   e.preventDefault();
+const CPO = insert(CEO, { name: 'Steve', uniqueId: 2, subordinates: [] })
+const CFO = insert(CEO, { name: 'Clement', uniqueId: 3, subordinates: [] });
+const CTO = insert(CEO, { name: 'Caleb', uniqueId: 4, subordinates: [] });
+const MARKETTING_LEAD = insert(CPO, { name: 'Emmanuel', uniqueId: 5, subordinates: [] });
+const SUPPORT_LEAD = insert(CPO, { name: 'Deji', uniqueId: 6, subordinates: [] })
+const COMPLIANCE_LEAD = insert(CFO, { name: 'Tolu', uniqueId: 7, subordinates: [] })
+const MOBILE_LEAD = insert(CTO, { name: 'Sayo', uniqueId: 8, subordinates: [] });
+const BACK_LEAD = insert(CTO, { name: 'Dev', uniqueId: 9, subordinates: [] });
+const FRONT_LEAD = insert(CTO, { name: "seyi", uniqueId: 10, subordinates: [] });
 
-//   console.log(
-//     type.value, 
-//     tofrom.value, 
-//     details.value, 
-//     amount.valueAsNumber
-//   );
-// });
+async function main() {
+    const test = new EmployeeOrgAppV2(CEO);
+
+    let ceopString = JSON.stringify(test.ceo);
+    let parsedCEO = JSON.parse(ceopString);
+
+    console.log({ ceo: parsedCEO }, "Initial Object");
+    test.move(10, 2);
+
+    ceopString = JSON.stringify(test.ceo);
+    parsedCEO = JSON.parse(ceopString);
+
+    console.log({ ceo: parsedCEO }, "After using move operation");
+
+    test.undo();
+
+    ceopString = JSON.stringify(test.ceo);
+    parsedCEO = JSON.parse(ceopString);
+
+    console.log({ ceo: parsedCEO }, "After using undo operation");
+
+    test.redo();
+
+    ceopString = JSON.stringify(test.ceo);
+    parsedCEO = JSON.parse(ceopString);
+
+    console.log({ ceo: parsedCEO }, "After using redo operation");
+
+}
+
+main()
+
+
+
+
